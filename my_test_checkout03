@@ -1,0 +1,43 @@
+#! /bin/dash
+
+# PATH="$PATH:$(pwd)"
+
+# # create a temporary directory for the test.
+# test_dir=$(mktemp -d)
+# cd "$test_dir" || exit 1
+
+# create a temporary directory for the test.
+
+# test_dir="dir_test"
+# mkdir "$test_dir"
+# cd "$test_dir" || exit 1
+
+# create some files to hold output.
+
+expected_output=$(mktemp)
+actual_output=$(mktemp)
+
+# remove the temporary directory when the test is done.
+
+# trap 'rm "$expected_output" "$actual_output" -rf "$test_dir"' INT HUP QUIT TERM EXIT
+
+# create pigs repository
+
+pigs-init
+echo hello >a
+pigs-add a
+pigs-commit -m commit-A
+pigs-branch b1
+echo world >>a
+pigs-checkout b1
+pigs-status
+pigs-checkout master
+pigs-add a
+pigs-status
+pigs-checkout b1
+pigs-status
+pigs-checkout master
+pigs-commit -a -m commit-B
+pigs-checkout b1
+
+

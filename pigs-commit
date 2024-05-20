@@ -1,0 +1,166 @@
+#! /bin/dash
+
+# check if the pigs repository is initialized
+if ! test -d ".pig"; then
+    echo "pigs-commit: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+is_modified=0
+
+current_branch=$(cat ".pig/active_branch")
+branch_dir=".pig/branches/$current_branch"
+index_dir="$branch_dir/index"
+commit_history_dir="$branch_dir/commit_history"
+
+# check if the number of arguments is correct
+if test $# -lt 2; then
+    echo "usage: pigs-commit [-a] -m commit-message"
+    exit 1
+# if the number of arguments is 2 or 3, check if the arguments are correct
+elif test $# -eq 2; then
+    if test "$1" != "-m"; then
+        echo "usage: pigs-commit [-a] -m commit-message"
+        exit 1
+    # check if the commit message is empty
+    elif test "$2" = ""; then
+        echo "usage: pigs-commit [-a] -m commit-message"
+        exit 1
+    fi
+    message=$2
+elif test $# -eq 3; then
+    # check if the arguments are correct
+    if test "$1" != "-a" || test "$2" != "-m"; then
+        echo "usage: pigs-commit [-a] -m commit-message"
+        exit 1
+    # check if the commit message is empty
+    elif test "$3" = ""; then
+        echo "usage: pigs-commit [-a] -m commit-message"
+        exit 1
+    fi
+    message=$3
+
+    # add all the files in the current directory to the index
+    for file in *; do
+        # check if the file is not in the index yet
+        if ! test -e "$index_dir/$file"; then
+            # add the file to the index
+            cp "$file" "$index_dir/$file"
+        # check if the file is modified
+        elif ! diff "$file" "$index_dir/$file" >/dev/null; then
+            # the file is modified
+            is_modified=1
+            cp "$file" "$index_dir/$file"
+        fi
+    done
+else
+    echo "usage: pigs-commit [-a] -m commit-message"
+    exit 1
+fi
+
+commit_number=0
+# check if the total commit log file is empty
+if test -s ".pig/commit_total.log"; then
+    # get the commit number of the last commit
+    commit_number=$(head -n 1 ".pig/commit_total.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+    commit_number=$((commit_number + 1))
+fi
+# use a log file to store the commit message
+
+# check if the log file exists
+
+# if ! test -e "$branch_dir/commit_msg.log"; then
+#     touch "$branch_dir/commit_msg.log"
+# else
+#     # get the commit number of the last commit
+
+#     commit_number=$(head -n 1 ".pig/commit_total.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+#     commit_number=$((commit_number + 1))
+# fi
+
+# check if the files in the index are the same as the files in the last commit
+if test "$commit_number" -gt 0; then
+    last_commit_number=$((commit_number - 1))
+    if test -d "$commit_history_dir/commit_$last_commit_number"; then
+        # check if the last commit is empty
+        if test "$(ls -A "$commit_history_dir"/commit_$last_commit_number)"; then
+            # check if the files in the last commit has been delete from the index
+            for file in "$commit_history_dir"/commit_"$last_commit_number"/*; do
+                if ! test -e "$index_dir/$(basename "$file")"; then
+                    # the file has been deleted from the index
+                    is_modified=1
+                    break
+                fi
+            done
+        fi
+    fi
+    # check if the index directory is empty
+    if test "$(ls -A "$index_dir")"; then
+        # check if the files in the index are different from the files in the last commit
+        for file in "$index_dir"/*; do
+            #check if the file exists in the last commit
+            if test -e "$commit_history_dir/commit_$last_commit_number/$(basename "$file")"; then
+                # the file exists in the last commit
+                if ! diff "$file" "$commit_history_dir/commit_$last_commit_number/$(basename "$file")" >/dev/null; then
+                    # the files in the index are not the same as the files in the last commit
+                    is_modified=1
+                    break
+                fi
+            else
+                # the file does not exist in the last commit
+                is_modified=1
+                break
+            fi
+        done
+    fi
+else
+    # it is the first commit
+    is_modified=1
+fi
+
+if test "$is_modified" -eq 0; then
+    echo "nothing to commit"
+    exit 1
+else
+    # check if the commit history directory exists
+    if ! test -d "$commit_history_dir"; then
+        mkdir "$commit_history_dir"
+    fi
+    # create a directory for the new commit
+    mkdir "$commit_history_dir/commit_$commit_number"
+
+    # check if the index directory is empty
+    if test "$(ls -A "$index_dir")"; then
+        # copy files in the  index to the commit history directory
+        for file in "$index_dir"/*; do
+            cp "$file" "$commit_history_dir/commit_$commit_number/$(basename "$file")"
+        done
+    fi
+
+    echo "Committed as commit $commit_number"
+
+    #check if the commit log file exists in the current branch
+    if ! test -e "$branch_dir/commit_msg.log"; then
+        touch "$branch_dir/commit_msg.log"
+    fi
+
+    # check if the commit log file in the current branch is empty
+    # if ! test -s "$branch_dir/commit_msg.log"; then
+    #     echo "$commit_number $message" >>"$branch_dir/commit_msg.log"
+    #     # append the commit message to the commit total log file in reverse order
+    #     temp_file=".pig/temp_file"
+    #     touch "$temp_file"
+    #     echo "$commit_number $message $current_branch" >"$temp_file" && cat ".pig/commit_total.log" >>"$temp_file" && mv "$temp_file" ".pig/commit_total.log"
+    #     exit 0
+    # fi
+
+    # append the commit message to the commit total log file in reverse order
+    temp_file=".pig/temp_file"
+    touch "$temp_file"
+    echo "$commit_number $message $current_branch" >"$temp_file" && cat ".pig/commit_total.log" >>"$temp_file" && mv "$temp_file" ".pig/commit_total.log"
+
+    # append the commit message to the commit log file in reverse order
+    temp_file="$branch_dir/temp_file"
+    touch "$temp_file"
+    echo "$commit_number $message" >"$temp_file" && cat "$branch_dir"/commit_msg.log >>"$temp_file" && mv "$temp_file" "$branch_dir/commit_msg.log"
+fi

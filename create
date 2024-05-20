@@ -1,0 +1,8 @@
+#! /bin/dash
+
+count=3
+
+while test "$count" -lt 10; do
+    touch "test0$count.sh"
+    count=$((count+1))
+done

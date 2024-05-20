@@ -1,0 +1,133 @@
+#! /bin/dash
+
+# PATH="$PATH:$(pwd)"
+
+# # create a temporary directory for the test.
+# test_dir=$(mktemp -d)
+# cd "$test_dir" || exit 1
+
+# create a temporary directory for the test.
+test_dir="dir_test"
+mkdir "$test_dir"
+cd "$test_dir" || exit 1
+
+# create some files to hold output.
+
+expected_output=$(mktemp)
+actual_output=$(mktemp)
+
+# remove the temporary directory when the test is done.
+
+# trap 'rm "$expected_output" "$actual_output" -rf "$test_dir"' INT HUP QUIT TERM EXIT
+
+# create pigs repository
+
+cat >"$expected_output" <<EOF
+Initialized empty pigs repository in .pig
+EOF
+
+2041 pigs-init >"$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+echo "success init"
+
+# create some test files
+
+touch a b
+
+# add some files to the repository staging area
+
+cat >"$expected_output" <<EOF
+EOF
+
+2041 pigs-add a b >"$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# commit files in the index to the repository
+
+cat >"$expected_output" <<EOF
+Committed as commit 0
+EOF
+
+2041 pigs-commit -m 'first commit' >"$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+echo "success first commit"
+
+# remove the file in the current directory
+rm a
+
+cat >"$expected_output" <<EOF
+nothing to commit
+EOF
+
+# commit the file to the repository history
+2041 pigs-commit -m "second commit" >"$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# add the a again
+
+cat >"$expected_output" <<EOF
+EOF
+
+2041 pigs-add a >"$actual_output" 2>&1
+
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# commit the file to the repository history
+
+cat >"$expected_output" <<EOF
+Committed as commit 1
+EOF
+
+2041 pigs-commit -m "second commit" >"$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# remove the file in the index
+
+cat >"$expected_output" <<EOF
+EOF
+
+2041 pigs-rm --cached b >"$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# commit the file to the repository history
+
+cat >"$expected_output" <<EOF
+Committed as commit 2
+EOF
+
+2041 pigs-commit -m "second commit" >"$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi

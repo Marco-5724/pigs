@@ -1,0 +1,157 @@
+#! /bin/dash
+
+# check if the pigs repository is initialized
+if ! test -d ".pig"; then
+    echo "pigs-branch: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+if ! test -d ".pig/branches"; then
+    mkdir ".pig/branches"
+fi
+
+current_branch=$(cat ".pig/active_branch")
+branch_dir=".pig/branches"
+current_branch_dir="$branch_dir/$current_branch"
+# index_dir="$current_branch_dir/index"
+commit_history_dir="$current_branch_dir/commit_history"
+
+# check if there is any commit
+if ! test -s "$current_branch_dir/commit_msg.log"; then
+    echo "pigs-branch: error: this command can not be run until after the first commit"
+    exit 1
+fi
+
+# check if the -d option is specified
+if test "$1" = "-d"; then
+    # check if the number of arguments is correct
+    if test $# -ne 2; then
+        echo "usage: pigs-branch [-d] <branch>"
+        exit 1
+    fi
+
+    branch_name=$2
+
+    # check if the branch exists
+    if ! test -d "$branch_dir/$branch_name"; then
+        echo "pigs-branch: error: branch '$branch_name' doesn't exist"
+        exit 1
+    fi
+
+    # check if the branch is default branch
+    if test "$branch_name" = "master"; then
+        echo "pigs-branch: error: can not delete branch 'master': default branch"
+        exit 1
+    fi
+
+    # check if the branch is the current branch
+    if test "$current_branch" = "$branch_name"; then
+        echo "pigs-branch: error: cannot delete the current branch"
+        exit 1
+    fi
+
+    parent_branch_name=$(cat "$branch_dir/$branch_name/parent_branch")
+    parent_branch="$branch_dir/$parent_branch_name"
+
+    current_branch_last_commit=$(head -n 1 "$current_branch_dir/commit_msg.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+
+    # check if the branch has unmerged changes
+    for commit in "$branch_dir/$branch_name/commit_history"/*; do
+        if test -d "$commit"; then
+            if ! test -d "$parent_branch/commit_history/$(basename "$commit")"; then
+                # the commit is not in the parent branch
+                echo "pigs-branch: error: branch '$branch_name' has unmerged changes"
+                exit 1
+            fi
+        fi
+    done
+
+    rm -rf "${branch_dir:?}/${branch_name:?}"
+    echo "Deleted branch '$branch_name'"
+    exit 0
+
+
+else
+    # check if the branch name is specified
+    if test -z "$1"; then
+        if test "$(ls -A "$branch_dir")"; then
+            # list all the branches
+            for branch in "$branch_dir"/*; do
+                if test -d "$branch"; then
+                    branch=$(basename "$branch")
+                    # check if the branch is the current branch
+                    echo "$branch"
+                fi
+            done
+        fi
+    else # branch name is specified
+        branch_name=$1
+
+        #check if the branch name is valid
+        if ! echo "$branch_name" | grep -E -- '^[a-zA-Z0-9][a-zA-Z0-9.-_]*$' >/dev/null; then
+            #check if the option is a letter
+            if echo "$branch_name" | grep -E -- '^-[^0-9]$' >/dev/null; then
+                echo "usage: pigs-branch [-d] <branch>"
+            else
+                echo "pigs-branch: error: invalid branch name '$branch_name'"
+                exit 1
+            fi
+        fi
+
+        # check if the branch exists
+        if test -d "$branch_dir/$branch_name"; then
+            echo "pigs-branch: error: branch '$branch_name' already exists"
+            exit 1
+        fi
+
+        current_HEAD_dir="$current_branch_dir/HEAD"
+        # check if the current branch has a HEAD directory
+        if ! test -d "$current_HEAD_dir"; then
+            mkdir "$current_HEAD_dir"
+        fi
+
+        # # check if the working directory of the current branch is empty
+        # if test "$(ls -A .)"; then
+        #     for file in *; do
+        #         # ignore the hidden files
+        #         if echo "$file" | grep -E -- '^\.' >/dev/null; then
+        #             continue
+        #         fi
+        #         # ignore the directories
+        #         if test -d "$file"; then
+        #             continue
+        #         fi
+        #         #backup the working directory in the current branch
+        #         cp "$file" "$current_HEAD_dir"
+        #     done
+        # fi
+        #  # create the branch directory
+        # mkdir -p "$target_branch_dir/HEAD"
+        # # copy the HEAD directory from the current branch to the new branch
+        # cp -r "$current_HEAD_dir" "$target_branch_dir"
+
+        target_branch_dir="$branch_dir/$branch_name"
+
+        # create a new branch
+
+        # create the branch directory
+        mkdir -p "$target_branch_dir/HEAD"
+
+        echo "$current_branch" >"$target_branch_dir"/parent_branch
+        echo "$current_branch_last_commit" >"$target_branch_dir"/fork_point
+
+        current_branch_last_commit=$(head -n 1 "$current_branch_dir/commit_msg.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+        # copy the last commit from the current branch to the new branch
+        cp -r "$current_branch_dir/commit_history/commit_$current_branch_last_commit"/* "$target_branch_dir/HEAD"
+
+        # echo "$branch_name" >"$target_branch_dir/active_branch"
+
+        mkdir -p "$target_branch_dir/index"
+        # cp -r "$index_dir" "$target_branch_dir"
+
+        # copy the commit_msg.log file from the current branch to the new branch
+        cp "$current_branch_dir/commit_msg.log" "$target_branch_dir/commit_msg.log"
+        cp -r "$commit_history_dir" "$target_branch_dir"
+        exit 0
+    fi
+fi

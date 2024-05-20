@@ -1,0 +1,29 @@
+#! /bin/dash
+
+# check if the pigs repository is initialized
+if ! test -d ".pig"; then
+    echo "pigs-log: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+# check if the number of arguments is correct
+if test $# -gt 0; then
+    echo "usage: pigs-log"
+    exit 1
+fi
+
+current_branch=$(cat ".pig/active_branch")
+branch_dir=".pig/branches/$current_branch"
+
+# check if the commit log exists
+if ! test -e "$branch_dir/commit_msg.log"; then
+    # the commit log does not exist
+    exit 0
+# check if the commit log file is empty
+elif test ! -s "$branch_dir/commit_msg.log"; then
+    # the commit log file is empty
+    exit 0
+else
+    # print the commit log in reverse order
+    cat "$branch_dir/commit_msg.log"
+fi

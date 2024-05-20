@@ -1,0 +1,72 @@
+#! /bin/dash
+
+# create a temporary directory for the test.
+test_dir=$(mktemp -d)
+cd "$test_dir" || exit 1
+
+# create some files to hold output.
+
+expected_output=$(mktemp)
+actual_output=$(mktemp)
+
+# cemove the temporary directory when the test is done.
+
+trap 'rm "$expected_output" "$actual_output" -rf "$test_dir"' INT HUP QUIT TERM EXIT
+
+# create pigs repository
+
+cat > "$expected_output" <<EOF
+Initialized empty pigs repository in .pig
+EOF
+
+pigs-init > "$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# create a simple file.
+
+echo "hello" > a
+echo "world" > b
+
+# add a file to the repository staging area
+
+cat > "$expected_output" <<EOF
+EOF
+
+pigs-add a b > "$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# commit files in the index to the repository
+
+cat > "$expected_output" <<EOF
+Committed as commit 0
+EOF
+
+pigs-commit -m 'first commit' > "$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi
+
+# update the file
+
+echo "line 2" >> a
+
+cat > "$expected_output" <<EOF
+Committed as commit 1
+EOF
+
+pigs-commit -a -m 'second commit' > "$actual_output" 2>&1
+
+if ! diff "$expected_output" "$actual_output"; then
+    echo "Failed test"
+    exit 1
+fi

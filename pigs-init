@@ -1,0 +1,19 @@
+#! /bin/dash
+
+# check if the number of arguments is correct
+if test $# -ne 0; then
+    echo "usage: pigs-init"
+    exit 1
+fi
+
+#init a .pig directory as the git repository
+if ! test -d ".pig"; then
+    # mkdir -p ".pig/index"
+    mkdir -p ".pig/branches/master/index"
+    touch ".pig/active_branch"
+    touch ".pig/commit_total.log"
+    echo "master" >".pig/active_branch"
+    echo "Initialized empty pigs repository in .pig"
+else
+    echo "pigs-init: error: .pig already exists"
+fi

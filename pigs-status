@@ -1,0 +1,145 @@
+#! /bin/dash
+
+# check if the pigs repository is initialized
+if ! test -d ".pig"; then
+    echo "pigs-status: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+# check if the number of arguments is correct
+if test $# -ne 0; then
+    echo "usage: pigs-status"
+    exit 1
+fi
+
+current_branch=$(cat ".pig/active_branch")
+branch_dir=".pig/branches/$current_branch"
+index_dir="$branch_dir/index"
+commit_history_dir="$branch_dir/commit_history"
+
+commit_number=-1
+
+# get the last commit number
+# commit_number=$(head -n 1 ".pig/commit_total.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+
+
+commit_number=$(head -n 1 "$branch_dir/commit_msg.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+
+temp_file=$(mktemp)
+temp_file_sorted=$(mktemp)
+
+trap 'rm "$temp_file" "$temp_file_sorted"' INT HUP QUIT TERM EXIT
+
+cnt=0
+
+if test "$(ls -A .)"; then
+    for file in *; do
+        if ! test -f "$file"; then
+            continue
+        fi
+        # check if the file exists in the index
+        if ! test -e "$index_dir/$file"; then
+            # check if the file exists in the last commit
+            if ! test -e "$commit_history_dir/commit_$commit_number/$file"; then
+                echo "$file - untracked" >>"$temp_file"
+            fi
+        else # file exists in the index
+
+            # check if this is the first commit
+            if test "$commit_number" -eq -1; then
+                echo "$file - added to index" >> "$temp_file"
+            fi
+
+            # check if the file exists in the last commit
+            if ! test -e "$commit_history_dir/commit_$commit_number/$file"; then
+                # check if the file in the index is different from the file in the current directory
+                if ! diff "$file" "$index_dir/$file" >/dev/null; then
+                    echo "$file - added to index, file changed" >> "$temp_file"
+
+                else
+                    echo "$file - added to index" >> "$temp_file"
+                fi
+
+            else # file exists in the last commit
+                # check if the file in the current directory is different from the file in the index
+                if ! diff "$file" "$index_dir/$file" >/dev/null; then
+                    # check if the file in the index is different from the file in the last commit
+                    if ! diff "$index_dir/$file" "$commit_history_dir/commit_$commit_number/$file" >/dev/null; then
+                        if ! diff "$file" "$commit_history_dir/commit_$commit_number/$file" >/dev/null; then
+                            echo "$file - file changed, different changes staged for commit" >> "$temp_file"
+                        else
+                            echo "$file - same as repo" >> "$temp_file"
+                        fi
+                    else
+                        echo "$file - file changed, changes not staged for commit" >> "$temp_file"
+                    fi
+
+                # check if the file in the index is different from the file in the last commit
+                elif ! diff "$index_dir/$file" "$commit_history_dir/commit_$commit_number/$file" >/dev/null; then
+                    echo "$file - file changed, changes staged for commit" >> "$temp_file"
+
+                else
+                    echo "$file - same as repo" >> "$temp_file"
+                fi
+
+            fi
+
+        fi
+        cnt=$((cnt + 1))
+    done
+fi
+
+if test "$(ls -A "$index_dir")"; then
+    # iterate through the files in the index
+    for file in "$index_dir"/*; do
+        filename=$(basename "$file")
+        # check if the file that exists in the index does not exist in the current directory
+        if ! test -e "$filename"; then
+            # files in the index are not in the current directory but are in the repo
+            if test -e "$commit_history_dir/commit_$commit_number/$filename"; then
+                echo "$filename - file deleted" >> "$temp_file"
+            else
+                echo "$filename - added to index, file deleted" >> "$temp_file"
+            fi
+        fi
+    done
+fi
+
+if test "$commit_number" -ge 0; then
+    # check if the specific commit directory exists
+    if test -d "$commit_history_dir"/commit_"$commit_number"; then
+        # check if the specific commit directory is empty
+        if test "$(ls -A "$commit_history_dir"/commit_"$commit_number")"; then
+            # iterate through the files in the repo
+            for file in "$commit_history_dir"/"commit_$commit_number"/*; do
+                filename=$(basename "$file")
+                # check if the file that exists in the repo does not exist in the current directory
+                if ! test -e "$filename"; then
+
+                    # files in the repo are not in the current directory but are in the index
+                    if test -e "$index_dir/$filename"; then
+                        echo "$filename - file deleted" >> "$temp_file"
+
+                    else # files in the repo are not in the current directory and are not in the index
+                        echo "$filename - file deleted, deleted from index" >> "$temp_file"
+                    fi
+
+                else
+                    # files in the repo are in the current directory but are not in the index
+                    if ! test -e "$index_dir/$filename"; then
+                        echo "$filename - deleted from index" >> "$temp_file"
+                    fi
+
+                fi
+            done
+        fi
+    fi
+fi
+
+sort "$temp_file" | uniq > "$temp_file_sorted"
+
+cat "$temp_file_sorted"
+
+
+
+

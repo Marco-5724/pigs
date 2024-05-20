@@ -1,0 +1,170 @@
+#! /bin/dash
+
+# check if the pigs repository is initialized
+if ! test -d ".pig"; then
+    echo "pigs-checkout: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+# check if the number of arguments is correct
+if test $# -ne 1; then
+    echo "usage: pigs-checkout <branch>"
+    exit 1
+fi
+
+branch_name=$1
+
+#check if the branch name is valid
+if ! echo "$branch_name" | grep -E -- '^[a-zA-Z0-9][a-zA-Z0-9.-_]*$' >/dev/null; then
+    #check if the option is not a digit
+    if echo "$branch_name" | grep -E -- '^-[^0-9]$' >/dev/null; then
+        echo "usage: pigs-checkout <branch>"
+    else
+        echo "pigs-checkout: error: unknown branch '$branch_name'"
+        exit 1
+    fi
+fi
+
+current_branch=$(cat ".pig/active_branch")
+branch_dir=".pig/branches"
+current_branch_dir="$branch_dir/$current_branch"
+target_branch_dir="$branch_dir/$branch_name"
+index_dir="$current_branch_dir/index"
+commit_history_dir="$current_branch_dir/commit_history"
+
+# check if there is any commit
+if ! test -s "$current_branch_dir/commit_msg.log"; then
+    echo "pigs-checkout: error: this command can not be run until after the first commit"
+    exit 1
+fi
+
+# check if the branch exists
+if ! test -d "$branch_dir/$branch_name"; then
+    echo "pigs-checkout: error: unknown branch '$branch_name'"
+    exit 1
+fi
+
+# check if the branch is the current branch
+if test "$current_branch" = "$branch_name"; then
+    echo "Already on '$branch_name'"
+    exit 0
+fi
+
+current_branch_last_commit=$(head -n 1 "$current_branch_dir/commit_msg.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+target_branch_last_commit=$(head -n 1 "$target_branch_dir/commit_msg.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+
+current_HEAD_dir="$current_branch_dir/HEAD"
+#backup the working directory in the current branch
+if ! test -d "$current_HEAD_dir"; then
+    mkdir "$current_HEAD_dir"
+fi
+
+# check if the working directory of the current branch is empty
+
+# backup the last commit in the current branch
+if test "$(ls -A .)"; then
+    for file in *; do
+        # ignore the hidden files
+        if echo "$file" | grep -E -- '^\.' >/dev/null; then
+            continue
+        fi
+        # ignore the directories
+        if test -d "$file"; then
+            continue
+        fi
+
+        #backup the working directory in the current branch
+        cp "$file" "$current_HEAD_dir/$file"
+
+    done
+fi
+
+# cp -r "$commit_history_dir/commit_$current_branch_last_commit"/* "$current_HEAD_dir"
+
+# check if the target branch has a HEAD directory
+target_HEAD_dir="$target_branch_dir/HEAD"
+if ! test -d "$target_HEAD_dir"; then
+    mkdir "$target_HEAD_dir"
+fi
+
+is_modified=0
+
+# compare working directory and the HEAD directory of the current branch
+for file in *; do
+    # ignore the hidden files
+    if echo "$file" | grep -E -- '^\.' >/dev/null; then
+        continue
+    fi
+    # ignore the directories
+    if test -d "$file"; then
+        continue
+    fi
+
+    # check if the file exists in the HEAD directory of the current branch
+    if test -e "$commit_history_dir/commit_$current_branch_last_commit/$file"; then
+        # check if the file is modified
+        if ! diff "$file" "$commit_history_dir/commit_$current_branch_last_commit/$file" >/dev/null; then
+            is_modified=1
+            break
+        else
+            continue
+        fi
+    else
+        is_modified=1
+        break
+    fi
+
+done
+
+if test "$is_modified" -eq 1; then
+    # echo "working directory is not clean"
+    # check if the current_branch_last_commit is equal to the target_branch_last_commit
+    if test "$current_branch_last_commit" -eq "$target_branch_last_commit"; then
+        # echo "error: Your local changes to the following files would be overwritten by checkout:"
+        for file in *; do
+            # ignore the hidden files
+            if echo "$file" | grep -E -- '^\.' >/dev/null; then
+                continue
+            fi
+            # ignore the directories
+            if test -d "$file"; then
+                continue
+            fi
+
+            cp "$file" "$target_HEAD_dir/$file"
+
+        done
+
+    fi
+fi
+
+for file in *; do
+    # ignore the hidden files
+    if echo "$file" | grep -E -- '^\.' >/dev/null; then
+        continue
+    fi
+    # ignore the directories
+    if test -d "$file"; then
+        continue
+    fi
+    rm "$file"
+done
+
+# copy the files in HEAD to the working directory
+cp -r "$target_HEAD_dir"/* .
+# cp -r "$target_HEAD_dir"/* "$target_branch_dir/index"
+
+if test "$current_branch_last_commit" -ne "$target_branch_last_commit"; then
+    # copy the files in the last commit of the target branch to the working directory
+    cp -r "$target_branch_dir/commit_history/commit_$target_branch_last_commit"/* .
+else
+    cp -r "$index_dir"/* "$target_branch_dir/index"
+fi
+
+# cp -r "$target_branch_dir/commit_history/commit_$target_branch_last_commit"/* .
+# fi
+
+# update the active branch
+echo "$branch_name" >".pig/active_branch"
+
+echo "Switched to branch '$branch_name'"

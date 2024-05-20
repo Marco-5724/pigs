@@ -1,0 +1,89 @@
+#! /bin/dash
+
+# command format: pigs-show <commit-number>:<filename>
+
+# check if the pigs repository is initialized
+if ! test -d ".pig"; then
+    echo "pigs-show: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+# check if the number of arguments is correct
+if test $# -ne 1; then
+    echo "usage: pigs-show <commit-number>:<filename>"
+    exit 1
+fi
+
+# check if the argument is valid (if it contains a colon)
+if ! echo "$1" | grep -E -- ':' >/dev/null; then
+    echo "pigs-show: error: invalid object $1"
+    exit 1
+
+# split the argument into commit number and filename
+else
+    current_branch=$(cat ".pig/active_branch")
+    branch_dir=".pig/branches/$current_branch"
+    index_dir="$branch_dir/index"
+    # remove the leading and trailing whitespaces
+    arg=$(echo "$1" | sed -E -- 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    # check if the commit number is valid
+    commit_number=$(echo "$arg" | sed -E -- 's/:.*$//')
+    # if the commit number is empty, print the specified file in index
+    if test -z "$commit_number"; then
+        # remove the colon
+        filename=$(echo "$arg" | sed -E -- 's/^://')
+        # check if the filename is valid
+        if ! echo "$filename" | grep -E -- '^[a-zA-Z0-9][a-zA-Z0-9.-_]*$' >/dev/null; then
+            echo "pigs-show: error: invalid filename '$filename'"
+            exit 1
+        fi
+        if ! test -f "$index_dir/$filename"; then
+            # check if the file exists in index
+            echo "pigs-show: error: '$filename' not found in index"
+            exit 1
+        fi
+
+        # print the file in index
+        cat "$index_dir/$filename"
+        exit 0
+    else
+        # if the commit number is not empty, check if it is valid
+        if ! echo "$commit_number" | grep -E -- '^[0-9]+$' >/dev/null; then
+            echo "pigs-show: error: unknown commit '$commit_number'"
+            exit 1
+        fi
+        # # check if the log file exists
+        # if ! test -e "$branch_dir/commit_msg.log"; then
+        #     echo "pigs-show: error: unknown commit '$commit_number'"
+        #     exit 1
+        # fi
+
+        # get the commit number of the last commit from the commit total log
+        last_commit_number=$(head -n 1 ".pig/commit_total.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+        # check if the specified commit number exists
+        if test "$commit_number" -gt "$last_commit_number"; then
+            echo "pigs-show: error: unknown commit '$commit_number'"
+            exit 1
+        fi
+
+        # last_commit_number=$(head -n 1 "$branch_dir/commit_msg.log" | sed -E -- 's/^([0-9]+) .*$/\1/')
+        # # check if the specified commit number exists
+        # if test "$commit_number" -gt "$last_commit_number"; then
+        #     echo "pigs-show: error: unknown commit '$commit_number'"
+        #     exit 1
+        # fi
+
+        commit_branch="$(grep -E -- "^$commit_number " ".pig/commit_total.log" | sed -E -- 's/^[0-9]+.* ([^ ]+)$/\1/')"
+        commit_branch_dir=".pig/branches/$commit_branch"
+        # check if the filename exists in the specified commit
+        filename=$(echo "$arg" | sed -E -- 's/^[0-9]+://')
+        if ! test -f "$commit_branch_dir/commit_history/commit_$commit_number/$filename"; then
+            echo "pigs-show: error: '$filename' not found in commit $commit_number"
+            exit 1
+        fi
+
+        # print the specified file in the specified commit
+        cat "$commit_branch_dir/commit_history/commit_$commit_number/$filename"
+        exit 0
+    fi
+fi

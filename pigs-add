@@ -1,0 +1,64 @@
+#! /bin/dash
+
+# check if the pigs repository is initialized
+if ! test -d ".pig"; then
+    echo "pigs-add: error: pigs repository directory .pig not found"
+    exit 1
+
+# check if the index directory exists
+elif ! test -d ".pig/index"; then
+    mkdir ".pig/index"
+fi
+
+# check if there is any file to add
+if test "$#" -eq 0; then
+    echo "usage: pigs-add <filenames>"
+    exit 1
+fi
+
+temp_files=$(mktemp -d)
+
+trap 'rm -rf "$temp_files"' INT HUP QUIT TERM EXIT
+
+current_branch=$(cat ".pig/active_branch")
+index_dir=".pig/branches/$current_branch/index"
+
+for file in "$@"; do
+    # check if the name of the file is valid
+    if ! echo "$file" | grep -E -- '^[a-zA-Z0-9][a-zA-Z0-9.-_]*$' >/dev/null; then
+        echo "pigs-add: error: invalid filename '$file'"
+        exit 1
+    fi
+
+    # check if the file exists in the current directory
+    if ! test -f "$file"; then
+        # check if the file is already in the index
+        if test -f "$index_dir/$file"; then
+            # if the file is already in the index but does not exist in the current directory, remove it from the index
+            rm "$index_dir/$file"
+            continue
+        else
+            # the file does not exist in current directory and is not in the index
+            echo "pigs-add: error: can not open '$file'"
+            exit 1
+        fi
+    else # the file exists in the current directory
+        # check if the file is already in the index
+        if test -f "$index_dir/$file"; then
+            # check if the file is modified
+            if ! diff "$file" "$index_dir/$file" >/dev/null; then
+                # the file is modified
+                cp "$file" "$temp_files/$file"
+            fi
+        else
+            # add the file to the index
+            cp "$file" "$temp_files/$file"
+        fi
+    fi
+done
+
+if test "$(ls -A "$temp_files")"; then
+    for file in "$temp_files"/*; do
+        cp "$file" "$index_dir/$(basename "$file")"
+    done
+fi
